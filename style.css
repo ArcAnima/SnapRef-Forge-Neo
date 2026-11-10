@@ -1,0 +1,124 @@
+.snapref-content {
+    --sr-surface: #f5f6f8;
+    --sr-card: #ffffff;
+    --sr-input: #f4f5f7;
+    --sr-border: #d4d8de;
+    --sr-text: #252b34;
+    --sr-muted: #697381;
+    --sr-accent: #bd743c;
+    --sr-selected: #f7eade;
+    padding: 18px !important;
+    gap: 18px !important;
+    background: var(--sr-surface) !important;
+    border: 1px solid var(--sr-border) !important;
+    border-radius: 10px !important;
+}
+.dark .snapref-content {
+    --sr-surface: #12151b;
+    --sr-card: #1b2028;
+    --sr-input: #13171e;
+    --sr-border: #373e49;
+    --sr-text: #e0e4eb;
+    --sr-muted: #929caa;
+    --sr-accent: #dca36f;
+    --sr-selected: #352a22;
+}
+.snapref-content > .styler {
+    --layout-gap: 14px !important;
+    --form-gap-width: 14px !important;
+    gap: 18px !important;
+}
+.snapref-content .snapref-toolbar {
+    align-items: flex-end !important;
+    gap: 10px !important;
+}
+.snapref-content .snapref-toolbar button {
+    height: 40px !important;
+    min-height: 40px !important;
+    flex-grow: 0 !important;
+    padding: 0 14px !important;
+    border: 1px solid var(--sr-border) !important;
+    border-radius: 7px !important;
+    background: var(--sr-card) !important;
+    color: var(--sr-text) !important;
+}
+.snapref-content .snapref-toolbar button:hover { border-color: var(--sr-accent) !important; }
+.snapref-content .snapref-options {
+    align-items: stretch !important;
+    gap: 14px !important;
+}
+.snapref-content .snapref-options .block {
+    padding: 12px !important;
+    border: 1px solid var(--sr-border) !important;
+    border-radius: 8px !important;
+    background: var(--sr-card) !important;
+}
+.snapref-content .gradio-radio > .wrap { gap: 7px !important; margin-top: 8px; }
+.snapref-content .gradio-radio label {
+    padding: 8px 10px !important;
+    border: 1px solid var(--sr-border) !important;
+    border-radius: 6px !important;
+    background: var(--sr-input) !important;
+    color: var(--sr-muted) !important;
+}
+.snapref-content .gradio-radio label.selected {
+    background: var(--sr-selected) !important;
+    border-color: var(--sr-accent) !important;
+    color: var(--sr-text) !important;
+}
+.snapref-content input[type=radio], .snapref-content input[type=checkbox] { accent-color: var(--sr-accent) !important; }
+.snapref-content input[type=radio]:checked {
+    background-color: var(--sr-accent) !important;
+    border-color: var(--sr-accent) !important;
+}
+.snapref-content .snapref-references { gap: 14px !important; }
+.snapref-content .snapref-reference {
+    padding: 14px !important;
+    gap: 14px !important;
+    border: 1px solid var(--sr-border) !important;
+    border-radius: 10px !important;
+    background: var(--sr-card) !important;
+}
+.snapref-content .snapref-ref-title p {
+    margin: 0 !important;
+    color: var(--sr-text) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+}
+.snapref-content .gradio-image {
+    border: 1px dashed var(--sr-border) !important;
+    border-radius: 7px !important;
+    background: var(--sr-input) !important;
+}
+.snapref-content .upload-container button > .wrap { font-size: 0 !important; color: var(--sr-muted) !important; }
+.snapref-content .upload-container button > .wrap::after {
+    content: "Add image";
+    display: block;
+    margin-top: 8px;
+    font-size: 13px;
+}
+.snapref-content .upload-container .or { display: none !important; }
+.snapref-content .upload-container .icon-wrap { width: 26px !important; height: 26px !important; }
+.snapref-content .source-selection {
+    padding: 8px !important;
+    gap: 12px !important;
+    background: transparent !important;
+    border-top: 1px solid var(--sr-border) !important;
+}
+.snapref-content .source-selection button { color: var(--sr-muted) !important; }
+.snapref-content .source-selection button.selected { color: var(--sr-accent) !important; }
+.snapref-content .gradio-slider input[type=number],
+.snapref-content .gradio-textbox textarea,
+.snapref-content .gradio-dropdown .container > .wrap {
+    border: 1px solid var(--sr-border) !important;
+    border-radius: 6px !important;
+    background: var(--sr-input) !important;
+    color: var(--sr-text) !important;
+}
+.snapref-content .gradio-slider input[type=range] {
+    margin-top: 12px !important;
+    background-color: var(--sr-border) !important;
+    background-image: linear-gradient(var(--sr-accent),var(--sr-accent)) !important;
+}
+.snapref-content input[type=range]::-webkit-slider-thumb { background: var(--sr-text) !important; box-shadow: none !important; }
+.snapref-content :focus-visible { outline: 2px solid var(--sr-accent) !important; outline-offset: 3px; }

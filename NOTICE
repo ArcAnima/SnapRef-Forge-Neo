@@ -1,0 +1,7 @@
+SnapRef for Forge Neo
+Copyright 2026 ArcAnima / SnapRef contributors
+
+Adapter inference and attention math adapted from ArcAnima/SnapRef (Apache-2.0).
+APG correction originates from ElectronGirl/ComfyUI-Anima-Ref-Adapter (Apache-2.0).
+The Forge integration is independently adapted to Forge Neo's native patcher APIs.
+This distribution includes no model weights, Forge Neo code, or ComfyUI runtime.
