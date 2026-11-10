@@ -9,9 +9,18 @@ No ComfyUI installation or third-party reference extension is required.
 
 ## Install
 
-Copy this folder into `<Forge Neo>/extensions/snapref`, then restart Forge Neo.
 Use the `neo` branch of https://github.com/Haoming02/sd-webui-forge-classic.
 The extension adds a **SnapRef** panel in txt2img and img2img.
+
+In Forge Neo, open **Extensions → Install from URL** and paste:
+
+```text
+https://github.com/ArcAnima/SnapRef-Forge-Neo
+```
+
+Click **Install**, then restart Forge Neo from the **Installed** tab.
+For updates, use **Extensions → Installed → Check for updates**, apply the update, and restart.
+For manual installation, copy this repository into `<Forge Neo>/extensions/snapref` and restart.
 
 1. Set up an Anima checkpoint, Qwen3-0.6B text encoder and Qwen-Image VAE as usual.
 2. Enable the SnapRef panel and select an adapter. Download with the panel's button, or put
