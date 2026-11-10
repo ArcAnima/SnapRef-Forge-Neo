@@ -1,5 +1,9 @@
 # SnapRef for Forge Neo
 
+[![Civitai](https://img.shields.io/badge/Civitai-SnapRef-1769ff?style=for-the-badge)](https://civitai.com/models/3028191/snapref?modelVersionId=3457619)
+[![Hugging Face](https://img.shields.io/badge/Hugging_Face-Weights-ffcc4d?style=for-the-badge)](https://huggingface.co/0ppxnhximxr/snapref-v2a)
+[![Original SnapRef GitHub](https://img.shields.io/badge/GitHub-Original_SnapRef-24292f?style=for-the-badge&logo=github)](https://github.com/ArcAnima/SnapRef)
+
 Official native Forge Neo extension for SnapRef, maintained alongside ArcAnima/SnapRef.
 No ComfyUI installation or third-party reference extension is required.
 
