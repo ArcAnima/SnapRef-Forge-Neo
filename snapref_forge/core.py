@@ -5,6 +5,7 @@ import json
 import math
 import base64
 import io
+import os
 
 import torch
 import torch.nn.functional as F
@@ -178,13 +179,55 @@ def _rope(pe, t, h, w):
     return emb.reshape(*emb.shape[:-1], 2, 2).float()
 
 
+_FP64_ARITH: dict[str, bool] = {}   # device.type -> can this backend compute in float64
+
+
+def _fp64_env_override():
+    """SNAPREF_FP64=0 forces the float32 correction, =1 forces float64, unset probes the backend."""
+    raw = os.environ.get("SNAPREF_FP64", "").strip().lower()
+    if raw in ("0", "false", "off", "no"):
+        return False
+    if raw in ("1", "true", "on", "yes"):
+        return True
+    return None
+
+
+def _fp64_arith_ok(device) -> bool:
+    """True only if the backend can actually compute in float64, not merely hold a float64 dtype
+    (ArcAnima/SnapRef PR #5 by mouyase). MPS has no float64; Intel XPU accepts the cast but its float64
+    arithmetic fails ("Required aspect fp64 is not supported on the device"). Probed once per device type with
+    an elementwise op and a reduction on an 8-element tensor; a backend that supports float64 keeps it."""
+    override = _fp64_env_override()
+    if override is not None:
+        return override
+    key = getattr(device, "type", None) or str(device)
+    hit = _FP64_ARITH.get(key)
+    if hit is not None:
+        return hit
+    try:
+        probe = torch.ones(8, device=device, dtype=torch.float64)
+        float((probe * 2.0 + 1.0).sum().item())
+        ok = True
+    except (RuntimeError, NotImplementedError, TypeError):
+        ok = False
+    _FP64_ARITH[key] = ok
+    return ok
+
+
+def _correction_dtype(t):
+    """float64 where the backend can run it, float32 everywhere else (APG only projects the update onto the
+    per-sample direction of the cond x0 prediction; float32 is enough there)."""
+    return torch.float64 if _fp64_arith_ok(t.device) else torch.float32
+
+
 def _correct(guided, pos, correction, rescale_phi=0.5):
     """APG (drop the update's component parallel to the cond prediction) or CFG rescale, in x0 space
     (as ElectronGirl/ComfyUI-Anima-Ref-Adapter, Apache-2.0)."""
     dims = tuple(range(1, pos.ndim))
     if correction == "apg":
-        update = (guided - pos).double()
-        unit = F.normalize(pos.double().flatten(1), dim=1).view_as(pos)
+        cdt = _correction_dtype(pos)
+        update = (guided - pos).to(cdt)
+        unit = F.normalize(pos.to(cdt).flatten(1), dim=1).view_as(pos)
         return pos + (update - (update * unit).sum(dim=dims, keepdim=True) * unit).to(pos.dtype)
     if correction == "rescale":
         ratio = pos.std(dim=dims, keepdim=True) / guided.std(dim=dims, keepdim=True)
