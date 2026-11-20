@@ -63,8 +63,9 @@ class CoreTests(unittest.TestCase):
         refs, weights = select_references(refs, weights, 'Side by side')
         self.assertEqual(refs[0].size, (48,32))
         self.assertEqual(weights, [1.])
+        self.assertEqual(len(select_references([refs[0]]*8,[1.]*8,'Separate references')[0]), 8)
         with self.assertRaises(ValueError):
-            select_references([refs[0]]*5,[1.]*5,'Separate references')
+            select_references([refs[0]]*9,[1.]*9,'Separate references')
         with self.assertRaises(ValueError):
             select_references([refs[0]],[float('nan')],'Separate references')
 

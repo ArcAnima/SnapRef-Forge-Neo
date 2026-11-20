@@ -25,7 +25,7 @@ For manual installation, copy this repository into `<Forge Neo>/extensions/snapr
 1. Set up an Anima checkpoint, Qwen3-0.6B text encoder and Qwen-Image VAE as usual.
 2. Enable the SnapRef panel and select an adapter. Download with the panel's button, or put
    a released `snapref*.safetensors` file in this extension's `models/` or Forge's `models/Lora/` and refresh.
-3. Add up to four pictures, choose the mode, and describe the scene in your prompt.
+3. Add up to eight pictures (5–8 under **More references**), choose the mode, and describe the scene in your prompt.
 4. Keep Forge's **[Anima] Enable Reference** setting off. Do not add SnapRef as a normal `<lora:...>` tag.
 
 ## Supported controls

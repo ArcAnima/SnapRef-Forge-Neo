@@ -5,6 +5,7 @@ import json
 import math
 import base64
 import io
+import os
 
 import torch
 import torch.nn.functional as F
@@ -58,9 +59,12 @@ class Adapter:
         return weight.to(torch.bfloat16)
 
 
+MAX_REFERENCES = 8   # as the ComfyUI SnapRef node
+
+
 def select_references(images, weights, layout):
-    if len(images) > 4 or len(images) != len(weights):
-        raise ValueError('Use up to four reference images and one strength per image.')
+    if len(images) > MAX_REFERENCES or len(images) != len(weights):
+        raise ValueError(f'Use up to {MAX_REFERENCES} reference images and one strength per image.')
     if layout not in ('Separate references', 'Side by side'):
         raise ValueError('Unknown reference layout')
     refs, strengths = [], []
@@ -140,13 +144,32 @@ def _rows_attention(q, k_t, v_t, kv_ref, sizes, biases, rows, row_biases=None):
 
 
 def _masked_attention(q, k_t, v_t, kv_ref, sizes, biases, rows=None, row_biases=None):
-    """Reference implementation (and fallback) of _weighted_attention: SDPA with an additive key mask."""
-    k_r, v_r = kv_ref
+    """Reference implementation (and fallback) of _weighted_attention: SDPA with an additive key mask.
+
+    rows: only these batch rows read the reference; row_biases: extra log bias per row in rows.
+    Off CUDA the mask holds no -inf: MPS returns NaN (a black image) for -inf in an additive mask, although no
+    query row is ever fully masked here. So off CUDA the keys are not padded, and rows that do not read the
+    reference run as a separate plain call over the target keys. On CUDA nothing changes: keys are padded to a
+    multiple of 16 (aligned mask rows for the memory-efficient kernel) and masked with -inf."""
     B, S, H, D = q.shape
+    if rows is not None and not q.is_cuda:
+        rows = list(rows)
+        others = [r for r in range(B) if r not in rows]
+        if others:
+            out = q.new_empty(B, S, H * D)
+            if rows:
+                sel = torch.as_tensor(rows, device=q.device)
+                out[sel] = _masked_attention(q[sel], k_t[sel], v_t[sel], kv_ref, sizes, biases,
+                                             list(range(len(rows))), row_biases)
+            o = torch.as_tensor(others, device=q.device)
+            plain = F.scaled_dot_product_attention(q[o].transpose(1, 2), k_t[o].transpose(1, 2), v_t[o].transpose(1, 2))
+            out[o] = plain.transpose(1, 2).reshape(len(others), S, H * D)
+            return out
+    k_r, v_r = kv_ref
     k = torch.cat([k_r.expand(B, *k_r.shape[1:]).to(q.dtype), k_t], dim=1).transpose(1, 2)
     v = torch.cat([v_r.expand(B, *v_r.shape[1:]).to(q.dtype), v_t], dim=1).transpose(1, 2)
     n = k.shape[2]
-    pad = (-n) % 16
+    pad = (-n) % 16 if q.is_cuda else 0
     if pad:
         k, v = F.pad(k, (0, 0, 0, pad)), F.pad(v, (0, 0, 0, pad))
     mask = torch.zeros(B if rows is not None else 1, 1, 1, n + pad, device=q.device, dtype=q.dtype)
@@ -178,13 +201,55 @@ def _rope(pe, t, h, w):
     return emb.reshape(*emb.shape[:-1], 2, 2).float()
 
 
+_FP64_ARITH: dict[str, bool] = {}   # device.type -> can this backend compute in float64
+
+
+def _fp64_env_override():
+    """SNAPREF_FP64=0 forces the float32 correction, =1 forces float64, unset probes the backend."""
+    raw = os.environ.get("SNAPREF_FP64", "").strip().lower()
+    if raw in ("0", "false", "off", "no"):
+        return False
+    if raw in ("1", "true", "on", "yes"):
+        return True
+    return None
+
+
+def _fp64_arith_ok(device) -> bool:
+    """True only if the backend can actually compute in float64, not merely hold a float64 dtype
+    (ArcAnima/SnapRef PR #5 by mouyase). MPS has no float64; Intel XPU accepts the cast but its float64
+    arithmetic fails ("Required aspect fp64 is not supported on the device"). Probed once per device type with
+    an elementwise op and a reduction on an 8-element tensor; a backend that supports float64 keeps it."""
+    override = _fp64_env_override()
+    if override is not None:
+        return override
+    key = getattr(device, "type", None) or str(device)
+    hit = _FP64_ARITH.get(key)
+    if hit is not None:
+        return hit
+    try:
+        probe = torch.ones(8, device=device, dtype=torch.float64)
+        float((probe * 2.0 + 1.0).sum().item())
+        ok = True
+    except (RuntimeError, NotImplementedError, TypeError):
+        ok = False
+    _FP64_ARITH[key] = ok
+    return ok
+
+
+def _correction_dtype(t):
+    """float64 where the backend can run it, float32 everywhere else (APG only projects the update onto the
+    per-sample direction of the cond x0 prediction; float32 is enough there)."""
+    return torch.float64 if _fp64_arith_ok(t.device) else torch.float32
+
+
 def _correct(guided, pos, correction, rescale_phi=0.5):
     """APG (drop the update's component parallel to the cond prediction) or CFG rescale, in x0 space
     (as ElectronGirl/ComfyUI-Anima-Ref-Adapter, Apache-2.0)."""
     dims = tuple(range(1, pos.ndim))
     if correction == "apg":
-        update = (guided - pos).double()
-        unit = F.normalize(pos.double().flatten(1), dim=1).view_as(pos)
+        cdt = _correction_dtype(pos)
+        update = (guided - pos).to(cdt)
+        unit = F.normalize(pos.to(cdt).flatten(1), dim=1).view_as(pos)
         return pos + (update - (update * unit).sum(dim=dims, keepdim=True) * unit).to(pos.dtype)
     if correction == "rescale":
         ratio = pos.std(dim=dims, keepdim=True) / guided.std(dim=dims, keepdim=True)

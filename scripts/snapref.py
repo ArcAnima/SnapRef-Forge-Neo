@@ -13,7 +13,7 @@ from modules.prompt_parser import SdConditioning
 from modules.ui_components import InputAccordion
 from backend import memory_management
 from backend.args import dynamic_args
-from snapref_forge.core import Adapter, select_references
+from snapref_forge.core import MAX_REFERENCES, Adapter, select_references
 from snapref_forge.integration import Session, encode_image, add_reference_guidance, cleanup_after
 
 # Forge's post_sample/postprocess callbacks are skipped when a sampler raises.
@@ -71,12 +71,18 @@ class SnapRefScript(scripts.Script):
                     layout = gr.Radio(['Separate references','Side by side'],value='Separate references',label='Combine references')
                     fidelity = gr.Slider(0,1,value=1.,step=.05,label='Fidelity')
                 images,weights = [],[]
-                with gr.Row(elem_classes=['snapref-references']):
-                    for i in range(4):
-                        with gr.Column(min_width=190,elem_classes=['snapref-reference']):
-                            gr.Markdown(f'Reference {i+1}',elem_classes=['snapref-ref-title'])
-                            images.append(gr.Image(type='pil',label=f'Reference {i+1}',sources=['upload','clipboard'],height=200,show_label=False))
-                            weights.append(gr.Slider(0,2,value=1.,step=.05,label=f'Strength {i+1}'))
+
+                def reference_slots(first,last):
+                    with gr.Row(elem_classes=['snapref-references']):
+                        for i in range(first,last):
+                            with gr.Column(min_width=190,elem_classes=['snapref-reference']):
+                                gr.Markdown(f'Reference {i+1}',elem_classes=['snapref-ref-title'])
+                                images.append(gr.Image(type='pil',label=f'Reference {i+1}',sources=['upload','clipboard'],height=200,show_label=False))
+                                weights.append(gr.Slider(0,2,value=1.,step=.05,label=f'Strength {i+1}'))
+                reference_slots(0,4)
+                # 5-8 (as the ComfyUI node): each adds about 0.9 GB of reference K/V at 1 MP on the 2B model
+                with gr.Accordion('More references (5-8)',open=False):
+                    reference_slots(4,MAX_REFERENCES)
                 with gr.Accordion('Advanced',open=False):
                     with gr.Row():
                         mp = gr.Slider(.1,2,value=1.,step=.1,label='Reference size (MP)')
@@ -96,8 +102,10 @@ class SnapRefScript(scripts.Script):
         named += [(w,f'Strength {i+1}') for i,w in enumerate(weights)]
         self.infotext_fields = [(component,'SnapRef '+name) for component,name in named]
         self.infotext_fields.append((enabled,lambda d:'SnapRef Adapter' in d))
-        return [enabled,adapter,mode,layout,fidelity,mp,*[v for pair in zip(images,weights) for v in pair],
-                caption,in_uncond,rg_on,rg,end,correction,phi]
+        pairs = [v for pair in zip(images,weights) for v in pair]
+        # references 5-8 go last, so argument lists written for four references (API calls) keep their places
+        return [enabled,adapter,mode,layout,fidelity,mp,*pairs[:8],
+                caption,in_uncond,rg_on,rg,end,correction,phi,*pairs[8:]]
 
     def release(self,p=None):
         if self.session is not None:
@@ -109,7 +117,8 @@ class SnapRefScript(scripts.Script):
 
     def process_before_every_sampling(self,p,enabled,adapter,mode,layout,fidelity,mp,
                                       ref1,w1,ref2,w2,ref3,w3,ref4,w4,caption='',in_uncond=False,
-                                      rg_on=False,rg=4.5,end=1.,correction='apg',phi=.5,*args,**kwargs):
+                                      rg_on=False,rg=4.5,end=1.,correction='apg',phi=.5,
+                                      ref5=None,w5=1.,ref6=None,w6=1.,ref7=None,w7=1.,ref8=None,w8=1.,*args,**kwargs):
         self.release(p)
         if not enabled: return
         p._snapref_cleanup = self.release
@@ -122,7 +131,9 @@ class SnapRefScript(scripts.Script):
                 if not math.isfinite(float(value)) or not low <= float(value) <= high: raise ValueError('Invalid SnapRef setting')
             if correction not in ('apg','rescale','none'): raise ValueError('Invalid guidance correction')
             if shared.opts.anima_do_reference: raise ValueError('Turn off Settings → Stable Diffusion → [Anima] Enable Reference while using SnapRef.')
-            refs,weights = select_references([ref1,ref2,ref3,ref4],[w1,w2,w3,w4],layout)
+            pictures = [ref1,ref2,ref3,ref4,ref5,ref6,ref7,ref8]
+            strengths = [w1,w2,w3,w4,w5,w6,w7,w8]
+            refs,weights = select_references(pictures,strengths,layout)
             if not refs: return
             path = model_files().get(adapter)
             if path is None: raise ValueError('Download the selected SnapRef adapter, then refresh.')
@@ -139,7 +150,9 @@ class SnapRefScript(scripts.Script):
             settings = {'Adapter':path.name,'Mode':mode,'Layout':layout,'Fidelity':float(fidelity),'Reference MP':float(mp),
                         'Reference caption':caption,'Reference in negative':bool(in_uncond),'Extra guidance':bool(rg_on),
                         'Guidance':float(rg),'Guidance end':float(end),'Correction':correction,'Rescale phi':float(phi)}
-            settings.update({f'Strength {i+1}':float(w) for i,w in enumerate([w1,w2,w3,w4])})
+            # Strength 5-8 only when used: infotext of four-reference generations stays as it was
+            used = 8 if any(r is not None for r in pictures[4:]) else 4
+            settings.update({f'Strength {i+1}':float(w) for i,w in enumerate(strengths[:used])})
             settings['References'] = len(refs)
             settings['Reference hashes'] = ','.join(hashlib.sha256(r.tobytes()).hexdigest()[:12] for r in refs)
             p.extra_generation_params.update({'SnapRef '+k:v for k,v in settings.items()})
