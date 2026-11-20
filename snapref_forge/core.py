@@ -59,9 +59,12 @@ class Adapter:
         return weight.to(torch.bfloat16)
 
 
+MAX_REFERENCES = 8   # as the ComfyUI SnapRef node
+
+
 def select_references(images, weights, layout):
-    if len(images) > 4 or len(images) != len(weights):
-        raise ValueError('Use up to four reference images and one strength per image.')
+    if len(images) > MAX_REFERENCES or len(images) != len(weights):
+        raise ValueError(f'Use up to {MAX_REFERENCES} reference images and one strength per image.')
     if layout not in ('Separate references', 'Side by side'):
         raise ValueError('Unknown reference layout')
     refs, strengths = [], []
