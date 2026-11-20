@@ -141,13 +141,32 @@ def _rows_attention(q, k_t, v_t, kv_ref, sizes, biases, rows, row_biases=None):
 
 
 def _masked_attention(q, k_t, v_t, kv_ref, sizes, biases, rows=None, row_biases=None):
-    """Reference implementation (and fallback) of _weighted_attention: SDPA with an additive key mask."""
-    k_r, v_r = kv_ref
+    """Reference implementation (and fallback) of _weighted_attention: SDPA with an additive key mask.
+
+    rows: only these batch rows read the reference; row_biases: extra log bias per row in rows.
+    Off CUDA the mask holds no -inf: MPS returns NaN (a black image) for -inf in an additive mask, although no
+    query row is ever fully masked here. So off CUDA the keys are not padded, and rows that do not read the
+    reference run as a separate plain call over the target keys. On CUDA nothing changes: keys are padded to a
+    multiple of 16 (aligned mask rows for the memory-efficient kernel) and masked with -inf."""
     B, S, H, D = q.shape
+    if rows is not None and not q.is_cuda:
+        rows = list(rows)
+        others = [r for r in range(B) if r not in rows]
+        if others:
+            out = q.new_empty(B, S, H * D)
+            if rows:
+                sel = torch.as_tensor(rows, device=q.device)
+                out[sel] = _masked_attention(q[sel], k_t[sel], v_t[sel], kv_ref, sizes, biases,
+                                             list(range(len(rows))), row_biases)
+            o = torch.as_tensor(others, device=q.device)
+            plain = F.scaled_dot_product_attention(q[o].transpose(1, 2), k_t[o].transpose(1, 2), v_t[o].transpose(1, 2))
+            out[o] = plain.transpose(1, 2).reshape(len(others), S, H * D)
+            return out
+    k_r, v_r = kv_ref
     k = torch.cat([k_r.expand(B, *k_r.shape[1:]).to(q.dtype), k_t], dim=1).transpose(1, 2)
     v = torch.cat([v_r.expand(B, *v_r.shape[1:]).to(q.dtype), v_t], dim=1).transpose(1, 2)
     n = k.shape[2]
-    pad = (-n) % 16
+    pad = (-n) % 16 if q.is_cuda else 0
     if pad:
         k, v = F.pad(k, (0, 0, 0, pad)), F.pad(v, (0, 0, 0, pad))
     mask = torch.zeros(B if rows is not None else 1, 1, 1, n + pad, device=q.device, dtype=q.dtype)
